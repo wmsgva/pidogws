@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Updated 28.04.2025 by WS for angle move calculations - Version 2.04
 import os
 import sys
 from time import sleep, time
@@ -115,6 +116,7 @@ class Pidog():
     DEFAULT_TAIL_PIN = [9]
 
     HEAD_PITCH_OFFSET = 45
+    TEST_VALUE = 44
 
     HEAD_YAW_MIN = -90
     HEAD_YAW_MAX = 90
@@ -126,7 +128,6 @@ class Pidog():
     # init
     def __init__(self, leg_pins=DEFAULT_LEGS_PINS, head_pins=DEFAULT_HEAD_PINS, tail_pin=DEFAULT_TAIL_PIN,
                  leg_init_angles=None, head_init_angles=None, tail_init_angle=None):
-
 
         utils.reset_mcu()
         sleep(0.2)
@@ -152,14 +153,20 @@ class Pidog():
         self.pitch_error_integral = 0
         self.target_rpy = [0, 0, 0]
 
-        if leg_init_angles == None:
+        # Attributes for move to angle features
+        self.current_yaw = 0.0  # degrees
+        self.last_yaw_time = time.time()
+        self.direction_measure_count = 0
+        self.direction_measures = [0, 0, 0, 0]
+
+        if leg_init_angles is None:
             leg_init_angles = self.actions_dict['lie'][0][0]
-        if head_init_angles == None:
+        if head_init_angles is None:
             head_init_angles = [0, 0, self.HEAD_PITCH_OFFSET]
         else:
             head_init_angles[2] += self.HEAD_PITCH_OFFSET
             # head_init_angles = [0]*3
-        if tail_init_angle == None:
+        if tail_init_angle is None:
             tail_init_angle = [0]
 
         self.thread_list = []
@@ -305,7 +312,7 @@ class Pidog():
                 self.rgb_strip.close()
             if 'imu' in self.thread_list:
                 self.imu_thread.join()
-            if self.sensory_process != None:
+            if self.sensory_process is not None:
                 self.sensory_process.terminate()
 
             info('Quit')
@@ -597,7 +604,7 @@ class Pidog():
             ultrasonic_thread.start()
 
     def sensory_process_start(self):
-        if self.sensory_process != None:
+        if self.sensory_process is not None:
             self.sensory_process.terminate()
         self.sensory_process = Process(name='sensory_process',
                                          target=self.sensory_process_work,
@@ -689,11 +696,11 @@ class Pidog():
     # calculate angles and coords
 
     def set_pose(self, x=None, y=None, z=None):
-        if x != None:
+        if x is not None:
             self.pose[0, 0] = float(x)
-        if y != None:
+        if y is not None:
             self.pose[1, 0] = float(y)
-        if z != None:
+        if z is not None:
             self.pose[2, 0] = float(z)
 
     def set_rpy(self, roll=None, pitch=None, yaw=None, pid=False):
@@ -955,3 +962,60 @@ class Pidog():
 
     def get_battery_voltage(self):
         return round( utils.get_battery_voltage(), 2)
+    
+    def update_current_yaw(self):
+        gx, gy, gz = self.gyroData  # gz is in degrees/sec
+        current_yaw_time = time.time()
+        dt = current_yaw_time - self.last_yaw_time
+        self.last_yaw_time = current_yaw_time
+
+        # Integrate gyro z-axis to get yaw (degrees)
+        self.current_yaw += gz * dt
+        self.current_yaw %= 360  # Keep yaw in [0, 360)
+    
+    def turn_to_angle(self, target_angle, speed=60, tolerance=3):
+        """
+        Turn the robot to the specified absolute angle using the IMU.
+        target_angle: desired yaw in degrees (0-360)
+        speed: turning speed
+        tolerance: allowable error in degrees
+        """
+        # Get current yaw
+        self.update_current_yaw()
+        
+        # Calculate shortest turn direction
+        delta_angle = (target_angle - self.current_yaw + 360) % 360
+        if delta_angle > 180:
+            turn_direction = 'turn_left'
+            turn_angle = 360 - delta_angle
+        else:
+            turn_direction = 'turn_right'
+            turn_angle = delta_angle
+        
+        # Start turning
+        self.do_action(turn_direction, speed=speed)
+        while True:
+            self.update_current_yaw()
+            yaw_error = (target_angle - self.current_yaw + 360) % 360
+            if yaw_error > 180:
+                yaw_error = yaw_error - 360
+                
+            if abs(yaw_error) < tolerance:
+                break
+            
+            time.sleep(0.01)
+        
+        self.do_action('stop')
+        
+    def move_in_direction(self, angle, distance=1.0, speed=80):
+        """
+        Move the robot in the direction of the specified angle using the IMU.
+        angle: direction in degrees (0 = forward, 90 = right, etc.)
+        distance: how far to move (arbitrary units, adjust as needed)
+        speed: movement speed (0-100)
+        """
+        
+        self.turn_to_angle(angle, speed=speed)
+        self.do_action('forward', speed=speed)
+        time.sleep(distance)  # Adjust for your robot's stride
+        self.do_action('stop')
