@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# Updated 28.04.2025 by WS for angle move calculations - Version 2.04
+# Updated 04.05.2025 by WS for angle move calculations - Version 2.05
 import os
 import sys
-from time import sleep, time
+import time
 from multiprocessing import Process, Value, Lock
 import threading
 import numpy as np
@@ -130,7 +130,7 @@ class Pidog():
                  leg_init_angles=None, head_init_angles=None, tail_init_angle=None):
 
         utils.reset_mcu()
-        sleep(0.2)
+        time.sleep(0.2)
 
         from .actions_dictionary import ActionDict
         self.actions_dict = ActionDict()
@@ -347,7 +347,7 @@ class Pidog():
 
         if delay2 < -delay:
             delay2 = -delay
-        sleep(delay + delay2)
+        time.sleep(delay + delay2)
 
     def legs_switch(self, flag=False):
         self.legs_sw_flag = flag
@@ -387,7 +387,7 @@ class Pidog():
                 with self.legs_thread_lock:
                     self.legs_action_buffer.pop(0)
             except IndexError:
-                sleep(0.001)
+                time.sleep(0.001)
             except Exception as e:
                 error(f'\r_legs_action_thread Exception:{e}')
                 break
@@ -407,7 +407,7 @@ class Pidog():
                 _angles[2] += self.HEAD_PITCH_OFFSET
                 self.head.servo_move(_angles, self.head_speed)
             except IndexError:
-                sleep(0.001)
+                time.sleep(0.001)
             except Exception as e:
                 error(f'\r_head_action_thread Exception:{e}')
                 break
@@ -422,7 +422,7 @@ class Pidog():
                 # Release lock after copying data before the next operations
                 self.tail.servo_move(self.tail_current_angles, self.tail_speed)
             except IndexError:
-                sleep(0.001)
+                time.sleep(0.001)
             except Exception as e:
                 error(f'\r_tail_action_thread Exception:{e}')
                 break
@@ -435,7 +435,7 @@ class Pidog():
                 self.rgb_fail_count = 0
             except Exception as e:
                 self.rgb_fail_count += 1
-                sleep(0.001)
+                time.sleep(0.001)
                 if self.rgb_fail_count > 10:
                     error(f'\r_rgb_strip_thread Exception:{e}')
                     break
@@ -450,8 +450,8 @@ class Pidog():
         _gx = 0
         _gy = 0
         _gz = 0
-        time = 10
-        for _ in range(time):
+        caltime = 10
+        for _ in range(caltime):
             data = self.imu._sh3001_getimudata()
             if data == False:
                 break
@@ -463,14 +463,14 @@ class Pidog():
             _gx += self.gyroData[0]
             _gy += self.gyroData[1]
             _gz += self.gyroData[2]
-            sleep(0.1)
+            time.sleep(0.1)
 
-        self.imu_acc_offset[0] = round(-16384 - _ax/time, 0)
-        self.imu_acc_offset[1] = round(0 - _ay/time, 0)
-        self.imu_acc_offset[2] = round(0 - _az/time, 0)
-        self.imu_gyro_offset[0] = round(0 - _gx/time, 0)
-        self.imu_gyro_offset[1] = round(0 - _gy/time, 0)
-        self.imu_gyro_offset[2] = round(0 - _gz/time, 0)
+        self.imu_acc_offset[0] = round(-16384 - _ax/caltime, 0)
+        self.imu_acc_offset[1] = round(0 - _ay/caltime, 0)
+        self.imu_acc_offset[2] = round(0 - _az/caltime, 0)
+        self.imu_gyro_offset[0] = round(0 - _gx/caltime, 0)
+        self.imu_gyro_offset[1] = round(0 - _gy/caltime, 0)
+        self.imu_gyro_offset[2] = round(0 - _gz/caltime, 0)
 
         while not self.exit_flag:
             try:
@@ -497,10 +497,10 @@ class Pidog():
                 self.roll = atan(az/sqrt(ax*ax+ay*ay))*57.2957795
 
                 self.imu_fail_count = 0
-                sleep(0.05)
+                time.sleep(0.05)
             except Exception as e:
                 self.imu_fail_count += 1
-                sleep(0.001)
+                time.sleep(0.001)
                 if self.imu_fail_count > 10:
                     error(f'\r_imu_thread Exception:{e}')
                     self.exit_flag = True
@@ -576,9 +576,9 @@ class Pidog():
                 with lock:
                     val = round(float(self.ultrasonic.read()), 2)
                     distance_addr.value = val
-                sleep(0.01)
+                time.sleep(0.01)
             except Exception as e:
-                sleep(0.1)
+                time.sleep(0.1)
                 error(f'\rultrasonic_thread  except: {e}')
                 break
 
@@ -619,7 +619,7 @@ class Pidog():
             self.head_move_raw([[0, 0, 0]], speed)
             self.tail_move([[0, 0, 0]], speed)
             self.wait_all_done()
-            sleep(0.1)
+            time.sleep(0.1)
         except Exception as e:
             error(f'\rstop_and_lie error:{e}')
 
@@ -933,15 +933,15 @@ class Pidog():
 
     def wait_legs_done(self):
         while not self.is_legs_done():
-            sleep(0.001)
+            time.sleep(0.001)
 
     def wait_head_done(self):
         while not self.is_head_done():
-            sleep(0.001)
+            time.sleep(0.001)
 
     def wait_tail_done(self):
         while not self.is_tail_done():
-            sleep(0.001)
+            time.sleep(0.001)
 
     def wait_all_done(self):
         self.wait_legs_done()
